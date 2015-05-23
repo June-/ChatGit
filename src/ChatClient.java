@@ -2,45 +2,45 @@ import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
 import java.net.*;
+import java.util.ArrayList;
+import java.util.Iterator;
 
 public class ChatClient extends Frame {
+	private String Usrname = "";
     private Socket s = null;   //套接字 
     private DataOutputStream dos = null;  // 负责向Server端发送消息
     private DataInputStream  dis = null;  // 负责读取Server端转发的其他Client的消息
     private boolean bConnected = false;   //
- 
+    private ObjectInputStream is = null;  // 用于从文件读取用户列表 
 
     Thread tRecv = new Thread(new RecvThread());
-
 
     TextField tfTxt = new TextField();      //消息输入区
     TextArea taContent = new TextArea();    //消息显示区
     TextArea taFriends = new TextArea();
-    List lst = new List(4, false);
+    List friendList = new List(4, false);
     Panel panel = new Panel();
 
     // 产生一个窗口
     public void launchFrame() {
-        setTitle("Chat Client");
+        setTitle("Group Chat");
         setLocation(400, 300);
         setSize(600, 600);
         
-        lst.add("user1");
-        lst.add("user2");
-        lst.add("user3");
-        //panel.setLayout(new BorderLayout());
+        panel.setLayout(new BorderLayout());
         panel.add(taContent, BorderLayout.NORTH);
         panel.add(tfTxt, BorderLayout.SOUTH);
         add(panel, BorderLayout.WEST);
-        add(lst, BorderLayout.EAST);
+        add(friendList, BorderLayout.EAST);
         pack();
 
         this.addWindowListener(new WindowAdapter() {
             // 窗口关闭事件
-            public void windowClosing(WindowEvent arg0) {
-                disconnect();
+        	public void windowClosing(WindowEvent arg0) {
+        		send("qui-" + Usrname);
+        		disconnect();
                 System.exit(0);
-            }
+        	}
         });
 
         tfTxt.addActionListener(new TFListener());  // TextField事件处理
@@ -68,6 +68,7 @@ System.out.println("connected!");
 
     public void disconnect() {
         try {
+        	bConnected = false;
             dos.close();
             dis.close();
             s.close();
@@ -75,7 +76,17 @@ System.out.println("connected!");
             e.printStackTrace();
         }
     }
-
+   
+    public void send(String str) {
+        try {
+            dos.writeUTF(str);
+            dos.flush();
+            //dos.close();
+        } catch (IOException e1) {
+            e1.printStackTrace();
+        }
+    }
+    
     // TextField事件处理
     private class TFListener implements ActionListener {
 
@@ -86,13 +97,7 @@ System.out.println("connected!");
             tfTxt.setText("");
 
             // client把消息发送给server（可多行）
-            try {
-                dos.writeUTF(str);
-                dos.flush();
-                //dos.close();
-            } catch (IOException e1) {
-                e1.printStackTrace();
-            }
+            send(str);
         }
     }
 
@@ -103,20 +108,52 @@ System.out.println("connected!");
             try {
                 while (bConnected) {
                     String str = dis.readUTF();  // 读取消息
-                    taContent.setText(taContent.getText() + str + '\n');  // 显示消息
+                    String[] sArray = str.split("-");
+                    // friendList有变化，更新之
+                    if (sArray[0].equals("usr")) {
+                    	friendList.clear();
+                    	for (int i = 1; i < sArray.length; i++) {
+                    		if (!sArray[i].equals("")) 
+                    			friendList.add(sArray[i]);
+                    	}
+                    } 
+                    // 收到消息，显示
+                    else {
+                    	taContent.setText(taContent.getText() + str + '\n');  // 显示消息
+                    }
                 }
             } catch (SocketException e) {
-                System.out.println("quit, bye! (SocketException)");
+System.out.println("quit, bye! (SocketException)");
             } catch (EOFException e) {
-                System.out.println("quit, bye! (EOFException)");
+System.out.println("quit, bye! (EOFException)");
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
     }
 
+    public void setUsrname(String arg)
+    { Usrname = arg; }
+    
+    public String getUsrname()
+    { return Usrname; } 
+    
     public static void main(String[] args) {
-        new ChatClient().launchFrame();
+    	ChatClient cc = new ChatClient();
+    	Login login = new Login(cc, true);
+		login.launchFrame();
+//System.out.println("login.succeed(): " + login.succeed());
+
+    	if (login.succeed()) {
+System.out.println("login.succeed(): " + login.succeed());
+            cc.launchFrame();
+            cc.setUsrname(login.getUsrname());
+			cc.send("usr-" + login.getUsrname());	// Client登陆后发送用户名给服务器
+    	} 
+    	else {
+    		//messageBox("Login fail");
+    		System.out.println("(else) login fail");
+    	}
     }
 
 }

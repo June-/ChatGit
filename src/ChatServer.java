@@ -15,6 +15,8 @@ public class ChatServer {
         private boolean started = false;     // 表示server是否已绑定到端口
         private ServerSocket ss = null;
         List<Client> clients = new ArrayList<Client>();  // 保存连接到Server的所有Client
+        String allClientsName = "";
+        //String curClientName = "";
 
         public void start() {
             // Server端绑定端口
@@ -35,9 +37,9 @@ public class ChatServer {
                 while (started) {
                     Socket s = ss.accept();
                     Client c = new Client(s);
-System.out.println("a client connected!");
                     new Thread(c).start();
                     clients.add(c);
+System.out.println("\nLn42 start(): a client connected!");
                 
                     //dis.close();
                 }
@@ -58,6 +60,7 @@ System.out.println("a client connected!");
         private DataInputStream  dis = null;  // 负责从socket读消息内容
         private DataOutputStream dos = null;  // 负责把消息转发至Client
         private boolean bConnected = false;
+        private String clientName = "";
 
         // 初始化一个Client端的连接
         public Client(Socket s) {
@@ -77,8 +80,15 @@ System.out.println("a client connected!");
                 dos.writeUTF(str);
             } catch (IOException e) {
                 clients.remove(this);
-                System.out.println("One client quited, server removed it from group.");
+System.out.println("Ln83 send(): Client \"" + clientName + "\" quited, server removed it from group.");
             }
+        }
+        
+        public void broadcast(String str) {
+        	for (int i = 0; i < clients.size(); i++) {
+        		Client c = clients.get(i);
+        		c.send(str);
+        	}
         }
 
         public void run() {
@@ -86,15 +96,38 @@ System.out.println("a client connected!");
                 //当Client端已连接：即可反复接收client端消息
                 while (bConnected) {
                     String str = dis.readUTF();
-System.out.println(str);
+System.out.println("Ln92 run(): " + str + " recved.");
 
-                    for (int i = 0; i < clients.size(); i++) {
-                        Client c = clients.get(i);
-                        c.send(str);
+                    String[] sArray = str.split("-");
+                    
+					// 用户登录
+                    if (sArray[0].equals("usr")) {
+    					clientName = sArray[1];	//	当前发送消息的用户名字
+                        allClientsName += clientName + "-";
+                        str = "usr-" + allClientsName;
+//System.out.printf("Ln97: clientName: %s, allClientsName: %s\n", clientName, allClientsName);
+                    } 
+                    // 用户退出
+                    else if (sArray[0].equals("qui")) {
+                    	clientName = sArray[1];                    	
+                    	allClientsName = allClientsName.replace(clientName + "-", "");
+                    	str = "usr-" + allClientsName;
+                    	bConnected = false;
+                    } 
+                    // 消息内容 clientName:msgText
+                    else
+                    	str = clientName + str;
+                    
+                    // 消息转发
+                    if (!allClientsName.equals("")) { 
+                    	broadcast(str);
+System.out.printf("Ln127 run(): " + "\"%s\" broadcast\n", str) ;
                     }
                 }
             } catch (EOFException e) {
-                System.out.println("Client closed!");
+            	allClientsName = allClientsName.replace(clientName + "-", "");
+            	broadcast("usr-" + allClientsName);
+System.out.println("Ln129 run(): Client \"" + clientName + "\" closed!");
             } catch (IOException e) {
                 e.printStackTrace();
             } finally {
